@@ -11,6 +11,7 @@ export type Preset = {
 
 export type PomodoroState = {
   phase: Phase;
+  startedAt: number;
   endsAt: number;
   cyclesCompleted: number;
 };
@@ -37,6 +38,7 @@ function durationMs(phase: Phase, preset: Preset): number {
 export function startFocus(now: number, preset: Preset): PomodoroState {
   return {
     phase: 'focus',
+    startedAt: now,
     endsAt: now + durationMs('focus', preset),
     cyclesCompleted: 0,
   };
@@ -53,12 +55,14 @@ export function advance(
       cycles % preset.cyclesBeforeLongBreak === 0 ? 'longBreak' : 'shortBreak';
     return {
       phase: next,
+      startedAt: now,
       endsAt: now + durationMs(next, preset),
       cyclesCompleted: cycles,
     };
   }
   return {
     phase: 'focus',
+    startedAt: now,
     endsAt: now + durationMs('focus', preset),
     cyclesCompleted: state.cyclesCompleted,
   };

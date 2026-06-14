@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import './Popup.scss';
 import {
   BLOCKLIST_KEY,
   getBlocklist,
@@ -6,6 +7,7 @@ import {
 } from '../../shared/storage';
 import {
   DEFAULT_PRESET,
+  Phase,
   phaseLabel,
   Preset,
   PomodoroState,
@@ -64,6 +66,38 @@ function send(type: string): void {
   chrome.runtime.sendMessage({ type });
 }
 
+const RADIUS = 80;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
+const Ring: React.FC<{ progress: number; children: React.ReactNode }> = ({
+  progress,
+  children,
+}) => (
+  <div className="ring">
+    <svg viewBox="0 0 180 180">
+      <circle
+        className="track"
+        cx="90"
+        cy="90"
+        r={RADIUS}
+        fill="none"
+        strokeWidth="10"
+      />
+      <circle
+        className="fill"
+        cx="90"
+        cy="90"
+        r={RADIUS}
+        fill="none"
+        strokeWidth="10"
+        strokeDasharray={CIRCUMFERENCE}
+        strokeDashoffset={CIRCUMFERENCE * (1 - progress)}
+      />
+    </svg>
+    <div className="ring-center">{children}</div>
+  </div>
+);
+
 const TimerView: React.FC = () => {
   const [state] = useStorageValue<PomodoroState | null>(
     POMODORO_STATE_KEY,
@@ -83,44 +117,53 @@ const TimerView: React.FC = () => {
 
   const running = !!state && state.endsAt > now;
   const remaining = state ? state.endsAt - now : 0;
+  const span = state ? state.endsAt - state.startedAt : 0;
+  const progress = state && span > 0 ? Math.min(1, remaining / span) : 0;
 
   return (
-    <div>
-      <div style={{ fontSize: 14, color: '#666' }}>
-        {state ? phaseLabel(state.phase) : 'Idle'}
-      </div>
-      <div style={{ fontSize: 36, fontWeight: 600, margin: '4px 0 12px' }}>
-        {state ? formatRemaining(remaining) : '–:––'}
-      </div>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+    <div className="timer">
+      <Ring progress={running ? progress : 0}>
+        <div className="phase">{state ? phaseLabel(state.phase) : 'Idle'}</div>
+        <div className="time">
+          {state ? formatRemaining(remaining) : '0:00'}
+        </div>
+        {state && <div className="cycles">{state.cyclesCompleted} cycles</div>}
+      </Ring>
+
+      <div className="controls">
         {!running ? (
-          <button onClick={() => send('pomodoro/start')}>Start focus</button>
+          <button
+            className="btn primary"
+            onClick={() => send('pomodoro/start')}
+          >
+            Start focus
+          </button>
         ) : (
           <>
-            <button onClick={() => send('pomodoro/skip')}>Skip</button>
-            <button onClick={() => send('pomodoro/stop')}>Stop</button>
+            <button className="btn" onClick={() => send('pomodoro/skip')}>
+              Skip
+            </button>
+            <button className="btn" onClick={() => send('pomodoro/stop')}>
+              Stop
+            </button>
           </>
         )}
       </div>
-      <label style={{ fontSize: 12, color: '#666' }}>
-        Preset:&nbsp;
+
+      <div className="preset-select">
+        <label>Active preset</label>
         <select
           value={activeId ?? ''}
           onChange={(e) => setActivePresetId(e.target.value)}
         >
           {(presets ?? []).map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name} ({p.focusMinutes}/{p.shortBreakMinutes}/
-              {p.longBreakMinutes})
+              {p.name} · {p.focusMinutes}/{p.shortBreakMinutes}/
+              {p.longBreakMinutes}
             </option>
           ))}
         </select>
-      </label>
-      {state && (
-        <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
-          Cycles completed: {state.cyclesCompleted}
-        </div>
-      )}
+      </div>
     </div>
   );
 };
@@ -147,37 +190,41 @@ const BlocklistEditor: React.FC = () => {
 
   return (
     <div>
-      <h4 style={{ margin: '0 0 6px' }}>Blocked sites</h4>
-      <form onSubmit={add} style={{ display: 'flex', gap: 4 }}>
+      <div className="section-head">
+        <h4>Blocked during focus</h4>
+      </div>
+      <form className="add-row" onSubmit={add}>
         <input
+          type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="example.com"
-          style={{ flex: 1, padding: 4 }}
         />
-        <button type="submit">Add</button>
+        <button className="ghost-btn" type="submit">
+          Add
+        </button>
       </form>
-      <ul style={{ listStyle: 'none', padding: 0, marginTop: 6 }}>
+      <ul className="chip-list">
         {list.map((d) => (
-          <li
-            key={d}
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              padding: '2px 0',
-            }}
-          >
+          <li key={d}>
             <span>{d}</span>
-            <button onClick={() => remove(d)}>×</button>
+            <button className="x" onClick={() => remove(d)}>
+              ×
+            </button>
           </li>
         ))}
-        {list.length === 0 && (
-          <li style={{ color: '#888' }}>No domains blocked.</li>
-        )}
+        {list.length === 0 && <li className="empty">No sites blocked yet.</li>}
       </ul>
     </div>
   );
 };
+
+const NUM_FIELDS: { key: keyof Preset; label: string }[] = [
+  { key: 'focusMinutes', label: 'Focus min' },
+  { key: 'shortBreakMinutes', label: 'Short break' },
+  { key: 'longBreakMinutes', label: 'Long break' },
+  { key: 'cyclesBeforeLongBreak', label: 'Cycles → long' },
+];
 
 const PresetEditor: React.FC = () => {
   const [presets] = useStorageValue<Preset[]>(PRESETS_KEY, getPresets);
@@ -190,7 +237,7 @@ const PresetEditor: React.FC = () => {
   const add = async () => {
     const id =
       (typeof crypto !== 'undefined' && crypto.randomUUID?.()) ||
-      `preset-${Date.now()}`;
+      `preset-${list.length}-${list.reduce((n, p) => n + p.name.length, 1)}`;
     const next: Preset = { ...DEFAULT_PRESET, id, name: 'New preset' };
     await savePresets([...list, next]);
   };
@@ -201,34 +248,23 @@ const PresetEditor: React.FC = () => {
   };
 
   return (
-    <div style={{ marginTop: 14 }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-        }}
-      >
-        <h4 style={{ margin: '0 0 6px' }}>Presets</h4>
-        <button onClick={add}>+ Add</button>
+    <div>
+      <div className="section-head">
+        <h4>Presets</h4>
+        <button className="ghost-btn" onClick={add}>
+          + Add
+        </button>
       </div>
       {list.map((p) => (
-        <div
-          key={p.id}
-          style={{
-            border: '1px solid #eee',
-            borderRadius: 4,
-            padding: 6,
-            marginBottom: 6,
-          }}
-        >
-          <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+        <div className="preset-card" key={p.id}>
+          <div className="preset-name-row">
             <input
+              type="text"
               value={p.name}
               onChange={(e) => update(p.id, { name: e.target.value })}
-              style={{ flex: 1 }}
             />
             <button
+              className="ghost-btn"
               onClick={() => remove(p.id)}
               disabled={list.length <= 1}
               title={list.length <= 1 ? 'Keep at least one preset' : 'Delete'}
@@ -236,68 +272,20 @@ const PresetEditor: React.FC = () => {
               ×
             </button>
           </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 4,
-              fontSize: 12,
-            }}
-          >
-            <label>
-              Focus min
-              <input
-                type="number"
-                min={1}
-                value={p.focusMinutes}
-                onChange={(e) =>
-                  update(p.id, { focusMinutes: Number(e.target.value) || 1 })
-                }
-                style={{ width: '100%' }}
-              />
-            </label>
-            <label>
-              Short break
-              <input
-                type="number"
-                min={1}
-                value={p.shortBreakMinutes}
-                onChange={(e) =>
-                  update(p.id, {
-                    shortBreakMinutes: Number(e.target.value) || 1,
-                  })
-                }
-                style={{ width: '100%' }}
-              />
-            </label>
-            <label>
-              Long break
-              <input
-                type="number"
-                min={1}
-                value={p.longBreakMinutes}
-                onChange={(e) =>
-                  update(p.id, {
-                    longBreakMinutes: Number(e.target.value) || 1,
-                  })
-                }
-                style={{ width: '100%' }}
-              />
-            </label>
-            <label>
-              Cycles → long
-              <input
-                type="number"
-                min={1}
-                value={p.cyclesBeforeLongBreak}
-                onChange={(e) =>
-                  update(p.id, {
-                    cyclesBeforeLongBreak: Number(e.target.value) || 1,
-                  })
-                }
-                style={{ width: '100%' }}
-              />
-            </label>
+          <div className="preset-grid">
+            {NUM_FIELDS.map((f) => (
+              <label key={f.key}>
+                {f.label}
+                <input
+                  type="number"
+                  min={1}
+                  value={p[f.key] as number}
+                  onChange={(e) =>
+                    update(p.id, { [f.key]: Number(e.target.value) || 1 })
+                  }
+                />
+              </label>
+            ))}
           </div>
         </div>
       ))}
@@ -307,18 +295,31 @@ const PresetEditor: React.FC = () => {
 
 const Popup: React.FC = () => {
   const [tab, setTab] = useState<'timer' | 'settings'>('timer');
+  const [state] = useStorageValue<PomodoroState | null>(
+    POMODORO_STATE_KEY,
+    getPomodoroState
+  );
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const i = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(i);
+  }, []);
+
+  const phase: Phase | 'idle' =
+    state && state.endsAt > now ? state.phase : 'idle';
+
   return (
-    <div style={{ width: 320, padding: 12, fontFamily: 'system-ui' }}>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+    <div className={`popup phase-${phase}`}>
+      <div className="tabs">
         <button
+          className={tab === 'timer' ? 'active' : ''}
           onClick={() => setTab('timer')}
-          style={{ fontWeight: tab === 'timer' ? 600 : 400 }}
         >
           Timer
         </button>
         <button
+          className={tab === 'settings' ? 'active' : ''}
           onClick={() => setTab('settings')}
-          style={{ fontWeight: tab === 'settings' ? 600 : 400 }}
         >
           Settings
         </button>
@@ -328,6 +329,7 @@ const Popup: React.FC = () => {
       ) : (
         <>
           <BlocklistEditor />
+          <div className="divider" />
           <PresetEditor />
         </>
       )}
