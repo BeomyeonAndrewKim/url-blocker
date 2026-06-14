@@ -115,15 +115,21 @@ const TimerView: React.FC = () => {
     return () => clearInterval(i);
   }, []);
 
-  const running = !!state && state.endsAt > now;
-  const remaining = state ? state.endsAt - now : 0;
+  const paused = !!state?.pausedAt;
+  const remaining = state
+    ? (paused ? state.pausedAt! : now) <= state.endsAt
+      ? state.endsAt - (paused ? state.pausedAt! : now)
+      : 0
+    : 0;
   const span = state ? state.endsAt - state.startedAt : 0;
   const progress = state && span > 0 ? Math.min(1, remaining / span) : 0;
 
   return (
     <div className="timer">
-      <Ring progress={running ? progress : 0}>
-        <div className="phase">{state ? phaseLabel(state.phase) : 'Idle'}</div>
+      <Ring progress={state ? progress : 0}>
+        <div className="phase">
+          {!state ? 'Idle' : paused ? 'Paused' : phaseLabel(state.phase)}
+        </div>
         <div className="time">
           {state ? formatRemaining(remaining) : '0:00'}
         </div>
@@ -131,7 +137,7 @@ const TimerView: React.FC = () => {
       </Ring>
 
       <div className="controls">
-        {!running ? (
+        {!state ? (
           <button
             className="btn primary"
             onClick={() => send('pomodoro/start')}
@@ -140,6 +146,21 @@ const TimerView: React.FC = () => {
           </button>
         ) : (
           <>
+            {paused ? (
+              <button
+                className="btn primary"
+                onClick={() => send('pomodoro/resume')}
+              >
+                Resume
+              </button>
+            ) : (
+              <button
+                className="btn primary"
+                onClick={() => send('pomodoro/pause')}
+              >
+                Pause
+              </button>
+            )}
             <button className="btn" onClick={() => send('pomodoro/skip')}>
               Skip
             </button>
@@ -299,14 +320,8 @@ const Popup: React.FC = () => {
     POMODORO_STATE_KEY,
     getPomodoroState
   );
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const i = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(i);
-  }, []);
 
-  const phase: Phase | 'idle' =
-    state && state.endsAt > now ? state.phase : 'idle';
+  const phase: Phase | 'idle' = state ? state.phase : 'idle';
 
   return (
     <div className={`popup phase-${phase}`}>

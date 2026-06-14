@@ -14,6 +14,7 @@ export type PomodoroState = {
   startedAt: number;
   endsAt: number;
   cyclesCompleted: number;
+  pausedAt?: number;
 };
 
 export const DEFAULT_PRESET: Preset = {
@@ -65,6 +66,22 @@ export function advance(
     startedAt: now,
     endsAt: now + durationMs('focus', preset),
     cyclesCompleted: state.cyclesCompleted,
+  };
+}
+
+export function pause(state: PomodoroState, now: number): PomodoroState {
+  if (state.pausedAt) return state;
+  return { ...state, pausedAt: now };
+}
+
+export function resume(state: PomodoroState, now: number): PomodoroState {
+  if (!state.pausedAt) return state;
+  const delta = now - state.pausedAt;
+  return {
+    ...state,
+    startedAt: state.startedAt + delta,
+    endsAt: state.endsAt + delta,
+    pausedAt: undefined,
   };
 }
 

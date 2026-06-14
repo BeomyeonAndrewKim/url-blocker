@@ -1,8 +1,10 @@
 import { BLOCKLIST_KEY, getBlocklist } from '../../shared/storage';
 import {
   advance,
+  pause,
   PomodoroState,
   phaseLabel,
+  resume,
   startFocus,
 } from '../../shared/pomodoro';
 import {
@@ -82,6 +84,21 @@ async function skip(): Promise<void> {
   notify(next);
 }
 
+async function pauseTimer(): Promise<void> {
+  const current = await getPomodoroState();
+  if (!current || current.pausedAt) return;
+  await chrome.alarms.clear(ALARM_NAME);
+  await setPomodoroState(pause(current, Date.now()));
+}
+
+async function resumeTimer(): Promise<void> {
+  const current = await getPomodoroState();
+  if (!current || !current.pausedAt) return;
+  const next = resume(current, Date.now());
+  await setPomodoroState(next);
+  await scheduleAlarm(next);
+}
+
 async function stop(): Promise<void> {
   await chrome.alarms.clear(ALARM_NAME);
   await setPomodoroState(null);
@@ -120,6 +137,8 @@ chrome.storage.onChanged.addListener(async (changes, area) => {
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   const handle = async () => {
     if (msg?.type === 'pomodoro/start') await start();
+    else if (msg?.type === 'pomodoro/pause') await pauseTimer();
+    else if (msg?.type === 'pomodoro/resume') await resumeTimer();
     else if (msg?.type === 'pomodoro/skip') await skip();
     else if (msg?.type === 'pomodoro/stop') await stop();
   };
