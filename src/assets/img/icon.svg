@@ -1,0 +1,28 @@
+<svg width="1024" height="1024" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f7896d"/>
+      <stop offset="1" stop-color="#e8543a"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="128" height="128" rx="30" fill="url(#bg)"/>
+
+  <!-- leaf / stem (tomato cue) -->
+  <g fill="#3fae74">
+    <path d="M64 18 C58 26 50 28 44 27 C49 35 58 37 64 33 Z"/>
+    <path d="M64 18 C70 26 78 28 84 27 C79 35 70 37 64 33 Z"/>
+    <rect x="61" y="18" width="6" height="12" rx="3"/>
+  </g>
+
+  <!-- clock face -->
+  <circle cx="64" cy="76" r="40" fill="#fff5f2"/>
+  <circle cx="64" cy="76" r="40" fill="none" stroke="#ffffff" stroke-width="4" opacity="0.6"/>
+
+  <!-- hands -->
+  <g stroke="#e8543a" stroke-linecap="round">
+    <line x1="64" y1="76" x2="64" y2="52" stroke-width="7"/>
+    <line x1="64" y1="76" x2="82" y2="84" stroke-width="7"/>
+  </g>
+  <circle cx="64" cy="76" r="5" fill="#c8402a"/>
+</svg>
