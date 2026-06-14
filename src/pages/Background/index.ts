@@ -1,4 +1,21 @@
 import { BLOCKLIST_KEY, getBlocklist } from '../../shared/storage';
+import {
+  advance,
+  PomodoroState,
+  phaseLabel,
+  startFocus,
+} from '../../shared/pomodoro';
+import {
+  ensureDefaults,
+  getActivePreset,
+} from '../../shared/presets';
+import {
+  getPomodoroState,
+  POMODORO_STATE_KEY,
+  setPomodoroState,
+} from '../../shared/pomodoroState';
+
+const ALARM_NAME = 'pomodoro';
 
 function buildRules(
   domains: string[]
@@ -17,8 +34,9 @@ function buildRules(
   }));
 }
 
-async function syncRules(): Promise<void> {
-  const domains = await getBlocklist();
+async function syncRules(state: PomodoroState | null): Promise<void> {
+  const isFocus = state?.phase === 'focus';
+  const domains = isFocus ? await getBlocklist() : [];
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: existing.map((r) => r.id),
@@ -26,10 +44,85 @@ async function syncRules(): Promise<void> {
   });
 }
 
-chrome.runtime.onInstalled.addListener(syncRules);
-chrome.runtime.onStartup.addListener(syncRules);
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes[BLOCKLIST_KEY]) {
-    syncRules();
+async function scheduleAlarm(state: PomodoroState): Promise<void> {
+  await chrome.alarms.clear(ALARM_NAME);
+  await chrome.alarms.create(ALARM_NAME, { when: state.endsAt });
+}
+
+function notify(state: PomodoroState): void {
+  chrome.notifications.create({
+    type: 'basic',
+    iconUrl: 'icon-128.png',
+    title: phaseLabel(state.phase),
+    message:
+      state.phase === 'focus'
+        ? 'Focus time. Blocked sites are now blocked.'
+        : 'Break time. Step away.',
+    priority: 1,
+  });
+}
+
+async function start(): Promise<void> {
+  const preset = await getActivePreset();
+  const state = startFocus(Date.now(), preset);
+  await setPomodoroState(state);
+  await scheduleAlarm(state);
+  await syncRules(state);
+  notify(state);
+}
+
+async function skip(): Promise<void> {
+  const current = await getPomodoroState();
+  if (!current) return start();
+  const preset = await getActivePreset();
+  const next = advance(current, Date.now(), preset);
+  await setPomodoroState(next);
+  await scheduleAlarm(next);
+  await syncRules(next);
+  notify(next);
+}
+
+async function stop(): Promise<void> {
+  await chrome.alarms.clear(ALARM_NAME);
+  await setPomodoroState(null);
+  await syncRules(null);
+}
+
+chrome.runtime.onInstalled.addListener(async () => {
+  await ensureDefaults();
+  await syncRules(await getPomodoroState());
+});
+
+chrome.runtime.onStartup.addListener(async () => {
+  await ensureDefaults();
+  await syncRules(await getPomodoroState());
+});
+
+chrome.alarms.onAlarm.addListener(async (alarm) => {
+  if (alarm.name !== ALARM_NAME) return;
+  const current = await getPomodoroState();
+  if (!current) return;
+  const preset = await getActivePreset();
+  const next = advance(current, Date.now(), preset);
+  await setPomodoroState(next);
+  await scheduleAlarm(next);
+  await syncRules(next);
+  notify(next);
+});
+
+chrome.storage.onChanged.addListener(async (changes, area) => {
+  if (area !== 'local') return;
+  if (changes[BLOCKLIST_KEY] && !changes[POMODORO_STATE_KEY]) {
+    await syncRules(await getPomodoroState());
   }
+});
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  const handle = async () => {
+    if (msg?.type === 'pomodoro/start') await start();
+    else if (msg?.type === 'pomodoro/skip') await skip();
+    else if (msg?.type === 'pomodoro/stop') await stop();
+  };
+  handle().then(() => sendResponse({ ok: true }));
+  return true;
 });

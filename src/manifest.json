@@ -10,6 +10,6 @@
   "icons": {
     "128": "icon-128.png"
   },
-  "permissions": ["declarativeNetRequest", "storage"],
+  "permissions": ["declarativeNetRequest", "storage", "alarms", "notifications"],
   "host_permissions": ["<all_urls>"]
 }
