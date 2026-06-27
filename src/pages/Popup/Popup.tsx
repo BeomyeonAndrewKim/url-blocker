@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import './Popup.scss';
 import {
+  ALWAYS_BLOCKLIST_KEY,
   BLOCKLIST_KEY,
+  getAlwaysBlocklist,
   getBlocklist,
+  setAlwaysBlocklist,
   setBlocklist,
 } from '../../shared/storage';
 import {
@@ -189,8 +192,13 @@ const TimerView: React.FC = () => {
   );
 };
 
-const BlocklistEditor: React.FC = () => {
-  const [domains] = useStorageValue<string[]>(BLOCKLIST_KEY, getBlocklist);
+const BlocklistEditor: React.FC<{
+  title: string;
+  storageKey: string;
+  load: () => Promise<string[]>;
+  save: (domains: string[]) => Promise<void>;
+}> = ({ title, storageKey, load, save }) => {
+  const [domains] = useStorageValue<string[]>(storageKey, load);
   const [input, setInput] = useState('');
   const list = domains ?? [];
 
@@ -201,18 +209,18 @@ const BlocklistEditor: React.FC = () => {
       setInput('');
       return;
     }
-    await setBlocklist([...list, domain]);
+    await save([...list, domain]);
     setInput('');
   };
 
   const remove = async (d: string) => {
-    await setBlocklist(list.filter((x) => x !== d));
+    await save(list.filter((x) => x !== d));
   };
 
   return (
     <div>
       <div className="section-head">
-        <h4>Blocked during focus</h4>
+        <h4>{title}</h4>
       </div>
       <form className="add-row" onSubmit={add}>
         <input
@@ -343,7 +351,19 @@ const Popup: React.FC = () => {
         <TimerView />
       ) : (
         <>
-          <BlocklistEditor />
+          <BlocklistEditor
+            title="Always blocked"
+            storageKey={ALWAYS_BLOCKLIST_KEY}
+            load={getAlwaysBlocklist}
+            save={setAlwaysBlocklist}
+          />
+          <div className="divider" />
+          <BlocklistEditor
+            title="Blocked during focus"
+            storageKey={BLOCKLIST_KEY}
+            load={getBlocklist}
+            save={setBlocklist}
+          />
           <div className="divider" />
           <PresetEditor />
         </>

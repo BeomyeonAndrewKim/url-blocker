@@ -1,4 +1,9 @@
-import { BLOCKLIST_KEY, getBlocklist } from '../../shared/storage';
+import {
+  ALWAYS_BLOCKLIST_KEY,
+  BLOCKLIST_KEY,
+  getAlwaysBlocklist,
+  getBlocklist,
+} from '../../shared/storage';
 import {
   advance,
   pause,
@@ -38,7 +43,11 @@ function buildRules(
 
 async function syncRules(state: PomodoroState | null): Promise<void> {
   const isFocus = state?.phase === 'focus';
-  const domains = isFocus ? await getBlocklist() : [];
+  const always = await getAlwaysBlocklist();
+  const focusOnly = isFocus ? await getBlocklist() : [];
+  const domains = always.concat(
+    focusOnly.filter((d) => always.indexOf(d) === -1)
+  );
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: existing.map((r) => r.id),
@@ -129,7 +138,10 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'local') return;
-  if (changes[BLOCKLIST_KEY] && !changes[POMODORO_STATE_KEY]) {
+  if (
+    (changes[BLOCKLIST_KEY] || changes[ALWAYS_BLOCKLIST_KEY]) &&
+    !changes[POMODORO_STATE_KEY]
+  ) {
     await syncRules(await getPomodoroState());
   }
 });
