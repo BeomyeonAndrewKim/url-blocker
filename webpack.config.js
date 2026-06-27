@@ -152,6 +152,12 @@ var options = {
       chunks: ['popup'],
       cache: false,
     }),
+    new HtmlWebpackPlugin({
+      template: path.join(__dirname, 'src', 'pages', 'Blocked', 'index.html'),
+      filename: 'blocked.html',
+      chunks: [],
+      cache: false,
+    }),
   ],
   infrastructureLogging: {
     level: 'info',

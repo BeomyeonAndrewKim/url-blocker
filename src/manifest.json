@@ -10,6 +10,15 @@
   "icons": {
     "128": "icon-128.png"
   },
-  "permissions": ["declarativeNetRequest", "storage", "alarms", "notifications"],
+  "permissions": [
+    "declarativeNetRequest",
+    "storage",
+    "alarms",
+    "notifications",
+    "webNavigation"
+  ],
+  "web_accessible_resources": [
+    { "resources": ["blocked.html"], "matches": ["<all_urls>"] }
+  ],
   "host_permissions": ["<all_urls>"]
 }

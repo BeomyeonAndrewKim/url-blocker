@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Site blocked</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          sans-serif;
+        background: radial-gradient(circle at 50% 30%, #2a2440, #15131f);
+        color: #ece9f5;
+      }
+      .card {
+        text-align: center;
+        padding: 48px 40px;
+        max-width: 420px;
+      }
+      .mark {
+        font-size: 56px;
+        line-height: 1;
+        margin-bottom: 20px;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 8px;
+      }
+      .host {
+        font-weight: 700;
+        color: #c4b5fd;
+        word-break: break-all;
+      }
+      p {
+        margin: 0;
+        color: #a39fb8;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="mark">⛔</div>
+      <h1><span class="host" id="host">This site</span> is blocked</h1>
+      <p>Stay on task — this site is on your block list.</p>
+    </div>
+    <script>
+      var host = new URLSearchParams(location.search).get('host');
+      if (host) document.getElementById('host').textContent = host;
+    </script>
+  </body>
+</html>

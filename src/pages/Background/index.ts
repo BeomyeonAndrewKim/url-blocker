@@ -41,18 +41,55 @@ function buildRules(
   }));
 }
 
-async function syncRules(state: PomodoroState | null): Promise<void> {
+// The set of domains that should be blocked right now: the always-blocked
+// list in every phase, plus the focus-only list while focusing (deduped).
+async function effectiveDomains(
+  state: PomodoroState | null
+): Promise<string[]> {
   const isFocus = state?.phase === 'focus';
   const always = await getAlwaysBlocklist();
   const focusOnly = isFocus ? await getBlocklist() : [];
-  const domains = always.concat(
-    focusOnly.filter((d) => always.indexOf(d) === -1)
-  );
+  return always.concat(focusOnly.filter((d) => always.indexOf(d) === -1));
+}
+
+function hostMatches(hostname: string, domains: string[]): boolean {
+  const host = hostname.replace(/^www\./, '');
+  return domains.some((d) => host === d || host.endsWith(`.${d}`));
+}
+
+function blockedPageUrl(host: string): string {
+  return chrome.runtime.getURL(`blocked.html?host=${encodeURIComponent(host)}`);
+}
+
+async function syncRules(state: PomodoroState | null): Promise<void> {
+  const domains = await effectiveDomains(state);
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: existing.map((r) => r.id),
     addRules: buildRules(domains),
   });
+  await redirectOpenTabs(domains);
+}
+
+// declarativeNetRequest only gates network requests, so a page that is already
+// open (or served from a site's service worker / cache) is never re-checked.
+// Redirect any open tab that now matches the blocklist to the block page so
+// enforcement is immediate.
+async function redirectOpenTabs(domains: string[]): Promise<void> {
+  if (domains.length === 0) return;
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (!tab.id || !tab.url) continue;
+    let host: string;
+    try {
+      host = new URL(tab.url).hostname;
+    } catch {
+      continue;
+    }
+    if (hostMatches(host, domains)) {
+      chrome.tabs.update(tab.id, { url: blockedPageUrl(host) });
+    }
+  }
 }
 
 async function scheduleAlarm(state: PomodoroState): Promise<void> {
@@ -134,6 +171,22 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   await scheduleAlarm(next);
   await syncRules(next);
   notify(next);
+});
+
+// Catch navigations at the navigation layer (before any service worker can
+// answer from cache) and redirect blocked sites to the block page. This is
+// what makes blocking work without a hard refresh.
+chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+  if (details.frameId !== 0) return;
+  let host: string;
+  try {
+    host = new URL(details.url).hostname;
+  } catch {
+    return;
+  }
+  const domains = await effectiveDomains(await getPomodoroState());
+  if (!hostMatches(host, domains)) return;
+  await chrome.tabs.update(details.tabId, { url: blockedPageUrl(host) });
 });
 
 chrome.storage.onChanged.addListener(async (changes, area) => {
