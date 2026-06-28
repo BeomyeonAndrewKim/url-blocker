@@ -32,7 +32,7 @@ function normalize(input: string): string {
   let s = input.trim().toLowerCase();
   s = s.replace(/^https?:\/\//, '');
   s = s.replace(/^www\./, '');
-  s = s.split('/')[0];
+  s = s.replace(/\/+$/, ''); // drop trailing slash, but keep any path
   return s;
 }
 
@@ -227,7 +227,7 @@ const BlocklistEditor: React.FC<{
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="example.com"
+          placeholder="example.com or example.com/path"
         />
         <button className="ghost-btn" type="submit">
           Add

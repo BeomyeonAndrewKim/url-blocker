@@ -24,26 +24,38 @@ import {
 
 const ALARM_NAME = 'pomodoro';
 
-function buildRules(
-  domains: string[]
-): chrome.declarativeNetRequest.Rule[] {
-  return domains.map((domain, i) => ({
-    id: i + 1,
-    priority: 1,
-    action: { type: chrome.declarativeNetRequest.RuleActionType.BLOCK },
-    condition: {
-      urlFilter: `||${domain}^`,
-      resourceTypes: [
-        chrome.declarativeNetRequest.ResourceType.MAIN_FRAME,
-        chrome.declarativeNetRequest.ResourceType.SUB_FRAME,
-      ],
-    },
-  }));
+// A blocklist entry is either a bare host ("youtube.com") or a host with a
+// path prefix ("youtube.com/shorts"). Split it into the two parts.
+function parseEntry(entry: string): { host: string; path: string } {
+  const slash = entry.indexOf('/');
+  return slash === -1
+    ? { host: entry, path: '' }
+    : { host: entry.slice(0, slash), path: entry.slice(slash) };
 }
 
-// The set of domains that should be blocked right now: the always-blocked
+function buildRules(
+  patterns: string[]
+): chrome.declarativeNetRequest.Rule[] {
+  return patterns.map((entry, i) => {
+    const { host, path } = parseEntry(entry);
+    return {
+      id: i + 1,
+      priority: 1,
+      action: { type: chrome.declarativeNetRequest.RuleActionType.BLOCK },
+      condition: {
+        urlFilter: path ? `||${host}${path}` : `||${host}^`,
+        resourceTypes: [
+          chrome.declarativeNetRequest.ResourceType.MAIN_FRAME,
+          chrome.declarativeNetRequest.ResourceType.SUB_FRAME,
+        ],
+      },
+    };
+  });
+}
+
+// The set of patterns that should be blocked right now: the always-blocked
 // list in every phase, plus the focus-only list while focusing (deduped).
-async function effectiveDomains(
+async function effectivePatterns(
   state: PomodoroState | null
 ): Promise<string[]> {
   const isFocus = state?.phase === 'focus';
@@ -52,43 +64,50 @@ async function effectiveDomains(
   return always.concat(focusOnly.filter((d) => always.indexOf(d) === -1));
 }
 
-function hostMatches(hostname: string, domains: string[]): boolean {
-  const host = hostname.replace(/^www\./, '');
-  return domains.some((d) => host === d || host.endsWith(`.${d}`));
+// Returns the matched entry (for display on the block page), or null.
+function matchUrl(url: string, patterns: string[]): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  const host = parsed.hostname.replace(/^www\./, '');
+  for (const entry of patterns) {
+    const { host: eHost, path } = parseEntry(entry);
+    const hostOk = host === eHost || host.endsWith(`.${eHost}`);
+    if (hostOk && (!path || parsed.pathname.startsWith(path))) return entry;
+  }
+  return null;
 }
 
-function blockedPageUrl(host: string): string {
-  return chrome.runtime.getURL(`blocked.html?host=${encodeURIComponent(host)}`);
+function blockedPageUrl(label: string): string {
+  return chrome.runtime.getURL(
+    `blocked.html?host=${encodeURIComponent(label)}`
+  );
 }
 
 async function syncRules(state: PomodoroState | null): Promise<void> {
-  const domains = await effectiveDomains(state);
+  const patterns = await effectivePatterns(state);
   const existing = await chrome.declarativeNetRequest.getDynamicRules();
   await chrome.declarativeNetRequest.updateDynamicRules({
     removeRuleIds: existing.map((r) => r.id),
-    addRules: buildRules(domains),
+    addRules: buildRules(patterns),
   });
-  await redirectOpenTabs(domains);
+  await redirectOpenTabs(patterns);
 }
 
 // declarativeNetRequest only gates network requests, so a page that is already
 // open (or served from a site's service worker / cache) is never re-checked.
 // Redirect any open tab that now matches the blocklist to the block page so
 // enforcement is immediate.
-async function redirectOpenTabs(domains: string[]): Promise<void> {
-  if (domains.length === 0) return;
+async function redirectOpenTabs(patterns: string[]): Promise<void> {
+  if (patterns.length === 0) return;
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
     if (!tab.id || !tab.url) continue;
-    let host: string;
-    try {
-      host = new URL(tab.url).hostname;
-    } catch {
-      continue;
-    }
-    if (hostMatches(host, domains)) {
-      chrome.tabs.update(tab.id, { url: blockedPageUrl(host) });
-    }
+    const matched = matchUrl(tab.url, patterns);
+    if (matched) chrome.tabs.update(tab.id, { url: blockedPageUrl(matched) });
   }
 }
 
@@ -175,19 +194,24 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 // Catch navigations at the navigation layer (before any service worker can
 // answer from cache) and redirect blocked sites to the block page. This is
-// what makes blocking work without a hard refresh.
-chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+// what makes blocking work without a hard refresh. onHistoryStateUpdated also
+// covers in-page SPA navigations (e.g. clicking a Short inside YouTube, which
+// is a history.pushState rather than a real page load).
+async function handleNavigation(details: {
+  frameId: number;
+  tabId: number;
+  url: string;
+}): Promise<void> {
   if (details.frameId !== 0) return;
-  let host: string;
-  try {
-    host = new URL(details.url).hostname;
-  } catch {
-    return;
+  const patterns = await effectivePatterns(await getPomodoroState());
+  const matched = matchUrl(details.url, patterns);
+  if (matched) {
+    await chrome.tabs.update(details.tabId, { url: blockedPageUrl(matched) });
   }
-  const domains = await effectiveDomains(await getPomodoroState());
-  if (!hostMatches(host, domains)) return;
-  await chrome.tabs.update(details.tabId, { url: blockedPageUrl(host) });
-});
+}
+
+chrome.webNavigation.onBeforeNavigate.addListener(handleNavigation);
+chrome.webNavigation.onHistoryStateUpdated.addListener(handleNavigation);
 
 chrome.storage.onChanged.addListener(async (changes, area) => {
   if (area !== 'local') return;
