@@ -35,6 +35,30 @@ Import treats the file as untrusted input: entries are re-normalized, duplicates
 and malformed presets are dropped with a warning, and a file that carries no
 presets never wipes the ones you already have.
 
+The page shows the expected shape, so a list can also be written by hand:
+
+```json
+{
+  "format": "url-blocker-backup",
+  "version": 1,
+  "alwaysBlocked": ["reddit.com", "youtube.com/shorts"],
+  "focusBlocked": ["news.ycombinator.com"],
+  "presets": [
+    {
+      "id": "classic",
+      "name": "Classic",
+      "focusMinutes": 25,
+      "shortBreakMinutes": 5,
+      "longBreakMinutes": 15,
+      "cyclesBeforeLongBreak": 4
+    }
+  ],
+  "activePresetId": "classic"
+}
+```
+
+Only `format` and `version` are required; everything else is optional.
+
 Backup lives on its own page rather than in the popup because on macOS the
 extension popup closes as soon as the OS file picker opens, which would make
 importing from the popup fail silently.

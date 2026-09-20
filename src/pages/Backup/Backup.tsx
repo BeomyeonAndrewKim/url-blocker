@@ -3,6 +3,8 @@ import './Backup.scss';
 import {
   applyBackup,
   Backup as BackupData,
+  BACKUP_FORMAT,
+  BACKUP_VERSION,
   backupFilename,
   buildBackup,
   ImportMode,
@@ -34,6 +36,55 @@ function delta(before: number, after: number): string {
   if (d === 0) return `${after} (unchanged)`;
   return `${after} (${d > 0 ? '+' : ''}${d})`;
 }
+
+const SAMPLE = `{
+  "format": "${BACKUP_FORMAT}",
+  "version": ${BACKUP_VERSION},
+  "alwaysBlocked": ["reddit.com", "youtube.com/shorts"],
+  "focusBlocked": ["news.ycombinator.com"],
+  "presets": [
+    {
+      "id": "classic",
+      "name": "Classic",
+      "focusMinutes": 25,
+      "shortBreakMinutes": 5,
+      "longBreakMinutes": 15,
+      "cyclesBeforeLongBreak": 4
+    }
+  ],
+  "activePresetId": "classic"
+}`;
+
+const FormatSpec: React.FC = () => (
+  <details className="format" open>
+    <summary>Expected file format</summary>
+    <pre>
+      <code>{SAMPLE}</code>
+    </pre>
+    <ul className="format-notes">
+      <li>
+        <code>format</code> and <code>version</code> are required —{' '}
+        <code>&quot;{BACKUP_FORMAT}&quot;</code> and a version of{' '}
+        {BACKUP_VERSION} or lower. A file without them is rejected.
+      </li>
+      <li>
+        Every other field is optional. Each entry is a host (
+        <code>reddit.com</code>) or a host with a path prefix (
+        <code>youtube.com/shorts</code>); a scheme, a leading <code>www.</code>{' '}
+        and a trailing slash are stripped for you.
+      </li>
+      <li>
+        A preset needs an <code>id</code>, a <code>name</code>, and all four
+        counts as whole numbers of 1 or more. Malformed entries are skipped with
+        a warning rather than failing the import.
+      </li>
+      <li>
+        Leaving <code>presets</code> out keeps the presets you already have,
+        even in overwrite mode.
+      </li>
+    </ul>
+  </details>
+);
 
 const Preview: React.FC<{ backup: BackupData }> = ({ backup }) => (
   <dl className="preview">
@@ -174,6 +225,8 @@ const Backup: React.FC = () => {
             }}
           />
         </div>
+
+        <FormatSpec />
 
         {status.kind === 'error' && (
           <p className="banner error">{status.message}</p>
