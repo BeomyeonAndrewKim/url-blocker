@@ -5,6 +5,7 @@ import {
   BLOCKLIST_KEY,
   getAlwaysBlocklist,
   getBlocklist,
+  normalizeDomain,
   setAlwaysBlocklist,
   setBlocklist,
 } from '../../shared/storage';
@@ -27,14 +28,6 @@ import {
   getPomodoroState,
   POMODORO_STATE_KEY,
 } from '../../shared/pomodoroState';
-
-function normalize(input: string): string {
-  let s = input.trim().toLowerCase();
-  s = s.replace(/^https?:\/\//, '');
-  s = s.replace(/^www\./, '');
-  s = s.replace(/\/+$/, ''); // drop trailing slash, but keep any path
-  return s;
-}
 
 function useStorageValue<T>(
   key: string,
@@ -111,7 +104,7 @@ const TimerView: React.FC = () => {
     ACTIVE_PRESET_KEY,
     getActivePresetId
   );
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const i = setInterval(() => setNow(Date.now()), 500);
@@ -204,7 +197,7 @@ const BlocklistEditor: React.FC<{
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
-    const domain = normalize(input);
+    const domain = normalizeDomain(input);
     if (!domain || list.includes(domain)) {
       setInput('');
       return;
@@ -322,6 +315,20 @@ const PresetEditor: React.FC = () => {
   );
 };
 
+const BackupLink: React.FC = () => (
+  <div className="section-head">
+    <h4>Backup &amp; restore</h4>
+    <button
+      className="ghost-btn"
+      onClick={() =>
+        chrome.tabs.create({ url: chrome.runtime.getURL('backup.html') })
+      }
+    >
+      Open ↗
+    </button>
+  </div>
+);
+
 const Popup: React.FC = () => {
   const [tab, setTab] = useState<'timer' | 'settings'>('timer');
   const [state] = useStorageValue<PomodoroState | null>(
@@ -366,6 +373,8 @@ const Popup: React.FC = () => {
           />
           <div className="divider" />
           <PresetEditor />
+          <div className="divider" />
+          <BackupLink />
         </>
       )}
     </div>

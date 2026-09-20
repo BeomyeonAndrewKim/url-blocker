@@ -1,60 +1,40 @@
 // Do this as the first thing so that any code reading it knows the right env.
-process.env.BABEL_ENV = 'development';
 process.env.NODE_ENV = 'development';
 process.env.ASSET_PATH = '/';
 
-var WebpackDevServer = require('webpack-dev-server'),
-  webpack = require('webpack'),
-  config = require('../webpack.config'),
-  env = require('./env'),
-  path = require('path');
+const path = require('path');
+const webpack = require('webpack');
+const WebpackDevServer = require('webpack-dev-server');
+const config = require('../webpack.config');
+const env = require('./env');
 
-var options = config.chromeExtensionBoilerplate || {};
-var excludeEntriesToHotReload = options.notHotReload || [];
+// MV3 forbids loading remote script, so there is no HMR client to inject —
+// the dev server just rebuilds into build/ on every save (`writeToDisk`).
+// Reopen the popup to pick up a change; hit "Reload" on chrome://extensions
+// only when the manifest or the service worker changed.
+const compiler = webpack(config);
 
-for (var entryName in config.entry) {
-  if (excludeEntriesToHotReload.indexOf(entryName) === -1) {
-    config.entry[entryName] = [
-      'webpack/hot/dev-server',
-      `webpack-dev-server/client?hot=true&hostname=localhost&port=${env.PORT}`,
-    ].concat(config.entry[entryName]);
-  }
-}
-
-config.plugins = [new webpack.HotModuleReplacementPlugin()].concat(
-  config.plugins || []
-);
-
-delete config.chromeExtensionBoilerplate;
-
-var compiler = webpack(config);
-
-var server = new WebpackDevServer(
+const server = new WebpackDevServer(
   {
-    https: false,
     hot: false,
+    liveReload: false,
     client: false,
     host: 'localhost',
     port: env.PORT,
-    static: {
-      directory: path.join(__dirname, '../build'),
-    },
+    static: { directory: path.join(__dirname, '../build') },
     devMiddleware: {
       publicPath: `http://localhost:${env.PORT}/`,
       writeToDisk: true,
     },
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-    },
+    headers: { 'Access-Control-Allow-Origin': '*' },
     allowedHosts: 'all',
   },
   compiler
 );
 
-if (process.env.NODE_ENV === 'development' && module.hot) {
-  module.hot.accept();
-}
-
 (async () => {
   await server.start();
+  console.log(
+    `Watching. Output is written to ${path.join(__dirname, '../build')}`
+  );
 })();

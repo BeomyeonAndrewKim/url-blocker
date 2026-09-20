@@ -12,10 +12,7 @@ import {
   resume,
   startFocus,
 } from '../../shared/pomodoro';
-import {
-  ensureDefaults,
-  getActivePreset,
-} from '../../shared/presets';
+import { ensureDefaults, getActivePreset } from '../../shared/presets';
 import {
   getPomodoroState,
   POMODORO_STATE_KEY,
@@ -33,9 +30,7 @@ function parseEntry(entry: string): { host: string; path: string } {
     : { host: entry.slice(0, slash), path: entry.slice(slash) };
 }
 
-function buildRules(
-  patterns: string[]
-): chrome.declarativeNetRequest.Rule[] {
+function buildRules(patterns: string[]): chrome.declarativeNetRequest.Rule[] {
   return patterns.map((entry, i) => {
     const { host, path } = parseEntry(entry);
     return {
