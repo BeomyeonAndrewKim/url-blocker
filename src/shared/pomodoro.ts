@@ -31,8 +31,8 @@ function durationMs(phase: Phase, preset: Preset): number {
     phase === 'focus'
       ? preset.focusMinutes
       : phase === 'shortBreak'
-      ? preset.shortBreakMinutes
-      : preset.longBreakMinutes;
+        ? preset.shortBreakMinutes
+        : preset.longBreakMinutes;
   return minutes * 60 * 1000;
 }
 
@@ -89,6 +89,6 @@ export function phaseLabel(phase: Phase): string {
   return phase === 'focus'
     ? 'Focus'
     : phase === 'shortBreak'
-    ? 'Short break'
-    : 'Long break';
+      ? 'Short break'
+      : 'Long break';
 }

@@ -1,14 +1,12 @@
 import { PomodoroState } from './pomodoro';
+import { readValue, writeValue } from './storage';
 
 export const POMODORO_STATE_KEY = 'pomodoro';
 
-export async function getPomodoroState(): Promise<PomodoroState | null> {
-  const result = await chrome.storage.local.get(POMODORO_STATE_KEY);
-  return result[POMODORO_STATE_KEY] ?? null;
+export function getPomodoroState(): Promise<PomodoroState | null> {
+  return readValue<PomodoroState | null>(POMODORO_STATE_KEY, null);
 }
 
-export async function setPomodoroState(
-  state: PomodoroState | null
-): Promise<void> {
-  await chrome.storage.local.set({ [POMODORO_STATE_KEY]: state });
+export function setPomodoroState(state: PomodoroState | null): Promise<void> {
+  return writeValue(POMODORO_STATE_KEY, state);
 }

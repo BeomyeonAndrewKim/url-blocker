@@ -93,7 +93,9 @@ body {
   .fill {
     stroke: var(--accent);
     stroke-linecap: round;
-    transition: stroke-dashoffset 0.5s linear, stroke 0.4s ease;
+    transition:
+      stroke-dashoffset 0.5s linear,
+      stroke 0.4s ease;
   }
 }
 

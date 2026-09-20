@@ -1,22 +1,22 @@
-var webpack = require('webpack'),
-  path = require('path'),
-  fileSystem = require('fs-extra'),
-  env = require('./utils/env'),
-  CopyWebpackPlugin = require('copy-webpack-plugin'),
-  HtmlWebpackPlugin = require('html-webpack-plugin'),
-  TerserPlugin = require('terser-webpack-plugin');
-var { CleanWebpackPlugin } = require('clean-webpack-plugin');
+const fs = require('fs');
+const path = require('path');
+const webpack = require('webpack');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+const TerserPlugin = require('terser-webpack-plugin');
+const env = require('./utils/env');
 
 const ASSET_PATH = process.env.ASSET_PATH || '/';
 
-var alias = {
-  'react-dom': '@hot-loader/react-dom',
-};
+const alias = {};
 
 // load the secrets
-var secretsPath = path.join(__dirname, 'secrets.' + env.NODE_ENV + '.js');
+const secretsPath = path.join(__dirname, 'secrets.' + env.NODE_ENV + '.js');
+if (fs.existsSync(secretsPath)) {
+  alias['secrets'] = secretsPath;
+}
 
-var fileExtensions = [
+const fileExtensions = [
   'jpg',
   'jpeg',
   'png',
@@ -29,18 +29,22 @@ var fileExtensions = [
   'woff2',
 ];
 
-if (fileSystem.existsSync(secretsPath)) {
-  alias['secrets'] = secretsPath;
-}
+// Each extension page: entry chunk + the HTML template it is injected into.
+const pages = [
+  { name: 'popup', dir: 'Popup' },
+  { name: 'backup', dir: 'Backup' },
+];
 
-var options = {
-  mode: process.env.NODE_ENV || 'development',
+const options = {
+  mode: env.NODE_ENV,
   entry: {
-    popup: path.join(__dirname, 'src', 'pages', 'Popup', 'index.jsx'),
+    ...Object.fromEntries(
+      pages.map((p) => [
+        p.name,
+        path.join(__dirname, 'src', 'pages', p.dir, 'index.tsx'),
+      ])
+    ),
     background: path.join(__dirname, 'src', 'pages', 'Background', 'index.ts'),
-  },
-  chromeExtensionBoilerplate: {
-    notHotReload: ['background'],
   },
   output: {
     filename: '[name].bundle.js',
@@ -51,61 +55,28 @@ var options = {
   module: {
     rules: [
       {
-        // look for .css or .scss files
         test: /\.(css|scss)$/,
-        // in the `src` directory
         use: [
-          {
-            loader: 'style-loader',
-          },
-          {
-            loader: 'css-loader',
-          },
-          {
-            loader: 'sass-loader',
-            options: {
-              sourceMap: true,
-            },
-          },
+          'style-loader',
+          'css-loader',
+          { loader: 'sass-loader', options: { sourceMap: true } },
         ],
       },
       {
         test: new RegExp('.(' + fileExtensions.join('|') + ')$'),
         type: 'asset/resource',
         exclude: /node_modules/,
-        // loader: 'file-loader',
-        // options: {
-        //   name: '[name].[ext]',
-        // },
       },
-      {
-        test: /\.html$/,
-        loader: 'html-loader',
-        exclude: /node_modules/,
-      },
-      { test: /\.(ts|tsx)$/, loader: 'ts-loader', exclude: /node_modules/ },
-      {
-        test: /\.(js|jsx)$/,
-        use: [
-          {
-            loader: 'source-map-loader',
-          },
-          {
-            loader: 'babel-loader',
-          },
-        ],
-        exclude: /node_modules/,
-      },
+      { test: /\.tsx?$/, loader: 'ts-loader', exclude: /node_modules/ },
     ],
   },
   resolve: {
-    alias: alias,
+    alias,
     extensions: fileExtensions
       .map((extension) => '.' + extension)
-      .concat(['.js', '.jsx', '.ts', '.tsx', '.css']),
+      .concat(['.js', '.ts', '.tsx', '.css']),
   },
   plugins: [
-    new CleanWebpackPlugin({ verbose: false }),
     new webpack.ProgressPlugin(),
     // expose and write the allowed env vars on the compiled bundle
     new webpack.EnvironmentPlugin(['NODE_ENV']),
@@ -115,30 +86,20 @@ var options = {
           from: 'src/manifest.json',
           to: path.join(__dirname, 'build'),
           force: true,
-          transform: function (content, path) {
-            // generates the manifest file using the package.json informations
-            return Buffer.from(
+          transform: (content) =>
+            Buffer.from(
               JSON.stringify({
                 description: process.env.npm_package_description,
                 version: process.env.npm_package_version,
                 ...JSON.parse(content.toString()),
               })
-            );
-          },
+            ),
         },
-      ],
-    }),
-    new CopyWebpackPlugin({
-      patterns: [
         {
           from: 'src/assets/img/icon-128.png',
           to: path.join(__dirname, 'build'),
           force: true,
         },
-      ],
-    }),
-    new CopyWebpackPlugin({
-      patterns: [
         {
           from: 'src/assets/img/icon-34.png',
           to: path.join(__dirname, 'build'),
@@ -146,12 +107,16 @@ var options = {
         },
       ],
     }),
-    new HtmlWebpackPlugin({
-      template: path.join(__dirname, 'src', 'pages', 'Popup', 'index.html'),
-      filename: 'popup.html',
-      chunks: ['popup'],
-      cache: false,
-    }),
+    ...pages.map(
+      (p) =>
+        new HtmlWebpackPlugin({
+          template: path.join(__dirname, 'src', 'pages', p.dir, 'index.html'),
+          filename: `${p.name}.html`,
+          chunks: [p.name],
+          cache: false,
+        })
+    ),
+    // The block page is plain HTML with no bundle of its own.
     new HtmlWebpackPlugin({
       template: path.join(__dirname, 'src', 'pages', 'Blocked', 'index.html'),
       filename: 'blocked.html',
@@ -169,11 +134,7 @@ if (env.NODE_ENV === 'development') {
 } else {
   options.optimization = {
     minimize: true,
-    minimizer: [
-      new TerserPlugin({
-        extractComments: false,
-      }),
-    ],
+    minimizer: [new TerserPlugin({ extractComments: false })],
   };
 }
 
